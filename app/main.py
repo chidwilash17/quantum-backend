@@ -1,4 +1,3 @@
-
 import asyncio
 import json
 import math
@@ -17,7 +16,6 @@ from typing import Dict, List, Optional, Any
 
 # Socket.IO imports
 import socketio
-from websocket import WebSocket
 
 # ===== IBM QUANTUM IMPORTS WITH ERROR HANDLING (FIXED) =====
 try:
@@ -28,39 +26,39 @@ try:
     print("✅ IBM Quantum libraries loaded successfully")
 except ImportError as e:
     IBM_QUANTUM_AVAILABLE = False
-    print(f"⚠️ IBM Quantum libraries not available: {e}")
+    print(f"⚠ IBM Quantum libraries not available: {e}")
     print("📝 Install with: pip install qiskit qiskit-ibm-runtime qiskit-ibm-provider")
     
     # Create dummy classes to prevent NameError
     class QuantumCircuit:
-        def __init__(self, *args, **kwargs): pass
+        def _init_(self, *args, **kwargs): pass
         def x(self, *args): pass
         def h(self, *args): pass
         def measure(self, *args): pass
     
     class QiskitRuntimeService:
-        def __init__(self, *args, **kwargs): pass
+        def _init_(self, *args, **kwargs): pass
         def backends(self): return []
         def least_busy(self, *args, **kwargs): return None
     
     class Session:
-        def __init__(self, *args, **kwargs): pass
-        def __enter__(self): return self
-        def __exit__(self, *args): pass
+        def _init_(self, *args, **kwargs): pass
+        def _enter_(self): return self
+        def _exit_(self, *args): pass
     
     class Sampler:
-        def __init__(self, *args, **kwargs): pass
+        def _init_(self, *args, **kwargs): pass
         def run(self, *args, **kwargs): 
             return type('MockJob', (), {'result': lambda: type('MockResult', (), {'get_counts': lambda: {'0': 512, '1': 512}})()})()
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+logger = logging.getLogger(_name_)
 
 # ===== SOCKET.IO SETUP =====
 sio = socketio.AsyncServer(
     async_mode='asgi',
-    cors_allowed_origins=["http://localhost:3000", "http://127.0.0.1:3000"],
+    cors_allowed_origins=["http://localhost:3000", "http://127.0.0.1:3000", "https://quantum-key-distribution-df2l.vercel.app", "https://quantum-backend-yh9m.onrender.com", "https://quantum-key-distribution-pqz6.vercel.app"],
     logger=True,
     engineio_logger=False
 )
@@ -71,7 +69,7 @@ app = FastAPI(title="IBM Quantum-Enhanced QKD Simulator", version="7.0.0")
 # CORS middleware for HTTP endpoints
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"],
+    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000", "https://quantum-key-distribution-df2l.vercel.app", "https://quantum-backend-yh9m.onrender.com"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -79,7 +77,7 @@ app.add_middleware(
 
 # ===== ENHANCED IBM QUANTUM SERVICE (UPDATED FOR QISKIT 2.0) =====
 class IBMQuantumService:
-    def __init__(self):
+    def _init_(self):
         self.service = None
         self.backend = None
         self.is_initialized = False
@@ -368,7 +366,7 @@ async def decrypt_aes(sid, data):
 
 @sio.event
 async def simulate_advanced_eavesdropper(sid):
-    logger.info(f'🕵️ Running eavesdropper analysis for client {sid}')
+    logger.info(f'🕵 Running eavesdropper analysis for client {sid}')
     
     backend_name = ibm_quantum.backend.name if ibm_quantum.is_initialized else "Simulator"
     scenarios = [
@@ -616,7 +614,7 @@ async def enhanced_bb84_with_transmission(sid, message, key_length, use_real_qua
         }
     }, room=sid)
     
-    status_emoji = "🔮" if use_ibm_quantum else "🖥️"
+    status_emoji = "🔮" if use_ibm_quantum else "🖥"
     await sio.emit('activity_log', {
         'action': f'✅ {status_emoji} Real-time BB84 Complete on {backend_name}: {len(final_key_bits)}-bit key, QBER: {final_error_rate:.3%}, Security: {security_level}',
         'timestamp': datetime.now().isoformat(),
@@ -769,24 +767,12 @@ async def health():
         "socketio_ready": True,
         "version": "7.0.0"
     }
-@app.websocket("/ws/{client_id}")
-async def websocket_endpoint(websocket: WebSocket, client_id: str):
-    await websocket.accept()
-    await websocket.send_json({"status": "connected", "client_id": client_id})
-    try:
-        while True:
-            data = await websocket.receive_text()
-            logger.debug(f"WS from {client_id}: {data}")
-            # echo or handle as needed
-            await websocket.send_json({"echo": data})
-    except Exception:
-        await websocket.close()
 
 # ===== MOUNT SOCKET.IO =====
 socket_app = socketio.ASGIApp(sio, other_asgi_app=app)
 
 # ===== SERVER STARTUP =====
-if __name__ == "__main__":
+if _name_ == "_main_":
     import uvicorn
     print("🚀 Starting IBM Quantum-Enhanced QKD Simulator...")
     print("✅ Real-time transmission enabled")
