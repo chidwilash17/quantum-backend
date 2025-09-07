@@ -769,22 +769,27 @@ async def health():
         "version": "7.0.0"
     }
 
-# ===== MOUNT SOCKET.IO =====
-socket_app = socketio.ASGIApp(sio, other_asgi_app=app)
+import socketio
+from fastapi import FastAPI
+import uvicorn
 
-# ===== SERVER STARTUP =====
+sio = socketio.AsyncServer(cors_allowed_origins="*")
+app = FastAPI()
+sio_app = socketio.ASGIApp(sio, other_asgi_app=app)
+
+@sio.event
+async def connect(sid, environ):
+    print("✅ Client connected:", sid)
+
+@sio.event
+async def disconnect(sid):
+    print("❌ Client disconnected:", sid)
+
+@sio.on("message")
+async def handle_message(sid, data):
+    print("📩 Received:", data)
+    await sio.emit("message", {"reply": "pong"}, to=sid)
+
 if __name__ == "__main__":
-    import uvicorn
-    print("🚀 Starting IBM Quantum-Enhanced QKD Simulator...")
-    print("✅ Real-time transmission enabled")
-    print("📡 WebSocket endpoint: ws://localhost:8000/socket.io/")
-    print("🔑 IAM Token exchange: POST /api/quantum/iam-token")
-    print("🌐 IBM Quantum init: POST /api/quantum/initialize")
-    print("📊 Backend status: GET /api/quantum/status")
-    print("📋 API Documentation: http://localhost:8000/docs")
-    
-    try:
-        uvicorn.run(socket_app, host="0.0.0.0", port=8000, reload=False)
-    except Exception as e:
-        logger.error(f"❌ Server startup failed: {e}")
-        input("Press Enter to exit...")
+    uvicorn.run(sio_app, host="0.0.0.0", port=8000)
+
