@@ -768,6 +768,7 @@ async def health():
         "socketio_ready": True,
         "version": "7.0.0"
     }
+app = FastAPI()
 app.websocket("/ws/{client_id}")
 async def websocket_endpoint(websocket: WebSocket, client_id: str):
     await websocket.accept()
