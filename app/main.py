@@ -767,6 +767,8 @@ async def health():
         "socketio_ready": True,
         "version": "7.0.0"
     }
+    socket_app = socketio.ASGIApp(sio, other_asgi_app=app)
+
 
 
 from fastapi import FastAPI, WebSocket
@@ -780,7 +782,7 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str):
     while True:
         data = await websocket.receive_text()
         await websocket.send_text(f"Echo from {client_id}: {data}")
-        socket_app = socketio.ASGIApp(sio, other_asgi_app=app)
+        
 
 # ===== SERVER STARTUP =====
 if __name__ == "__main__":
