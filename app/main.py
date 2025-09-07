@@ -26,7 +26,7 @@ try:
     print("✅ IBM Quantum libraries loaded successfully")
 except ImportError as e:
     IBM_QUANTUM_AVAILABLE = False
-    print(f"⚠ IBM Quantum libraries not available: {e}")
+    print(f"⚠️ IBM Quantum libraries not available: {e}")
     print("📝 Install with: pip install qiskit qiskit-ibm-runtime qiskit-ibm-provider")
     
     # Create dummy classes to prevent NameError
@@ -58,7 +58,7 @@ logger = logging.getLogger(__name__)
 # ===== SOCKET.IO SETUP =====
 sio = socketio.AsyncServer(
     async_mode='asgi',
-    cors_allowed_origins=["http://localhost:3000", "http://127.0.0.1:3000", "https://quantum-key-distribution-df2l.vercel.app", "https://quantum-backend-yh9m.onrender.com", "https://quantum-key-distribution-pqz6.vercel.app"],
+    cors_allowed_origins=["*"],
     logger=True,
     engineio_logger=False
 )
@@ -69,7 +69,7 @@ app = FastAPI(title="IBM Quantum-Enhanced QKD Simulator", version="7.0.0")
 # CORS middleware for HTTP endpoints
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000", "https://quantum-key-distribution-df2l.vercel.app", "https://quantum-backend-yh9m.onrender.com"],
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -196,7 +196,7 @@ class IBMQuantumService:
                     logger.info(f"Selected least busy backend: {self.backend.name}")
                 else:
                     # Fallback to first available backend
-                    self.backend = backends[0]
+                    self.backend = backends
                     logger.info(f"Using fallback backend: {self.backend.name}")
                     
             except Exception as backend_error:
@@ -366,7 +366,7 @@ async def decrypt_aes(sid, data):
 
 @sio.event
 async def simulate_advanced_eavesdropper(sid):
-    logger.info(f'🕵 Running eavesdropper analysis for client {sid}')
+    logger.info(f'🕵️ Running eavesdropper analysis for client {sid}')
     
     backend_name = ibm_quantum.backend.name if ibm_quantum.is_initialized else "Simulator"
     scenarios = [
@@ -614,7 +614,7 @@ async def enhanced_bb84_with_transmission(sid, message, key_length, use_real_qua
         }
     }, room=sid)
     
-    status_emoji = "🔮" if use_ibm_quantum else "🖥"
+    status_emoji = "🔮" if use_ibm_quantum else "🖥️"
     await sio.emit('activity_log', {
         'action': f'✅ {status_emoji} Real-time BB84 Complete on {backend_name}: {len(final_key_bits)}-bit key, QBER: {final_error_rate:.3%}, Security: {security_level}',
         'timestamp': datetime.now().isoformat(),
