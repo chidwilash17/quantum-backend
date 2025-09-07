@@ -726,6 +726,7 @@ app.include_router(api_router, prefix="/api")
 
 # ===== BASIC ENDPOINTS =====
 @app.get("/")
+
 async def root():
     return {
         "message": "🔐 IBM Quantum-Enhanced QKD Simulator with Real-time Transmission",
@@ -793,7 +794,7 @@ if __name__ == "__main__":
     print("📋 API Documentation: http://localhost:8000/docs")
     
     try:
-        uvicorn.run(socket_app, host="0.0.0.0", port=8000, reload=True)
+        uvicorn.run(app, host="0.0.0.0", port=8000, reload=True)
     except Exception as e:
         logger.error(f"❌ Server startup failed: {e}")
         input("Press Enter to exit...")
