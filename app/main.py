@@ -441,7 +441,7 @@ async def not_found_handler(request, exc):
         content={"error": "Endpoint not found", "available_endpoints": ["/", "/health", "/docs", "/api/status"]}
     )
 
-if _name_ == "_main_":
+if __name__ == "__main__":
     import uvicorn
     port = int(os.getenv("PORT", 8000))
     uvicorn.run(socket_app, host="0.0.0.0", port=port, log_level="info")
