@@ -59,7 +59,7 @@ logger = logging.getLogger(__name__)
 # ===== SOCKET.IO SETUP =====
 sio = socketio.AsyncServer(
     async_mode='asgi',
-    cors_allowed_origins=["http://localhost:3000", "http://127.0.0.1:3000"],
+    cors_allowed_origins=["http://localhost:3000", "http://127.0.0.1:3000, https://quantum-key-distribution-df2l.vercel.app"],
     logger=True,
     engineio_logger=False
 )
@@ -70,7 +70,7 @@ app = FastAPI(title="IBM Quantum-Enhanced QKD Simulator", version="7.0.0")
 # CORS middleware for HTTP endpoints
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"],
+    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000, https://quantum-key-distribution-df2l.vercel.app"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
