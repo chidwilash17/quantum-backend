@@ -773,12 +773,14 @@ from fastapi import FastAPI, WebSocket
 
 app = FastAPI()
 
-@app.websocket("/ws")
-async def websocket_endpoint(websocket: WebSocket):
+@app.websocket("/ws/{client_id}")
+async def websocket_endpoint(websocket: WebSocket, client_id: str):
     await websocket.accept()
+    print(f"🔌 Connected: {client_id}")
     while True:
         data = await websocket.receive_text()
-        await websocket.send_text(f"Echo: {data}")
+        await websocket.send_text(f"Echo from {client_id}: {data}")
+        socket_app = socketio.ASGIApp(sio, other_asgi_app=app)
 
 # ===== SERVER STARTUP =====
 if __name__ == "__main__":
@@ -792,7 +794,7 @@ if __name__ == "__main__":
     print("📋 API Documentation: http://localhost:8000/docs")
     
     try:
-        uvicorn.run(app, host="0.0.0.0", port=8000, reload=True)
+        uvicorn.run(socket_app, host="0.0.0.0", port=8000, reload=True)
     except Exception as e:
         logger.error(f"❌ Server startup failed: {e}")
         input("Press Enter to exit...")
