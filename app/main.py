@@ -16,6 +16,7 @@ from typing import Dict, List, Optional, Any
 
 # Socket.IO imports
 import socketio
+app = FastAPI()
 
 # ===== IBM QUANTUM IMPORTS WITH ERROR HANDLING (FIXED) =====
 try:
@@ -778,7 +779,6 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str):
         await websocket.send_text(f"Echo from {client_id}: {data}")
 
 # ===== MOUNT SOCKET.IO =====
-socket_app = socketio.ASGIApp(sio, other_asgi_app=app)
 
 # ===== SERVER STARTUP =====
 if __name__ == "__main__":
@@ -792,7 +792,7 @@ if __name__ == "__main__":
     print("📋 API Documentation: http://localhost:8000/docs")
     
     try:
-        uvicorn.run(socket_app, host="127.0.0.1", port=8000, reload=True)
+        uvicorn.run(app, host="127.0.0.1", port=8000, reload=True)
     except Exception as e:
         logger.error(f"❌ Server startup failed: {e}")
         input("Press Enter to exit...")
