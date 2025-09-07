@@ -59,7 +59,7 @@ logger = logging.getLogger(__name__)
 # ===== SOCKET.IO SETUP =====
 sio = socketio.AsyncServer(
     async_mode='asgi',
-    cors_allowed_origins=["http://localhost:3000", "http://127.0.0.1:3000, https://quantum-key-distribution-df2l.vercel.app"],
+    cors_allowed_origins=["*"],
     logger=True,
     engineio_logger=False
 )
@@ -70,7 +70,7 @@ app = FastAPI(title="IBM Quantum-Enhanced QKD Simulator", version="7.0.0")
 # CORS middleware for HTTP endpoints
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000, https://quantum-key-distribution-df2l.vercel.app"],
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -784,7 +784,7 @@ if __name__ == "__main__":
     print("📋 API Documentation: http://localhost:8000/docs")
     
     try:
-        uvicorn.run(socket_app, host="127.0.0.1", port=8000, reload=True)
+        uvicorn.run(socket_app, host="0.0.0.0", port=8000, reload=False)
     except Exception as e:
         logger.error(f"❌ Server startup failed: {e}")
         input("Press Enter to exit...")
