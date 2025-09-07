@@ -1,3 +1,4 @@
+from app.main import app  # or wherever your FastAPI app is defined
 import asyncio
 import json
 import math
@@ -796,7 +797,7 @@ if __name__ == "__main__":
     print("📋 API Documentation: http://localhost:8000/docs")
     
     try:
-        uvicorn.run(main:app, host="0.0.0.0", port=8000, reload=True)
+        uvicorn.run(app, host="0.0.0.0", port=8000, reload=True)
     except Exception as e:
         logger.error(f"❌ Server startup failed: {e}")
         input("Press Enter to exit...")
