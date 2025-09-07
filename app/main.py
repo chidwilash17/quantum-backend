@@ -768,8 +768,7 @@ async def health():
         "version": "7.0.0"
     }
 
-# ===== MOUNT SOCKET.IO =====
-socket_app = socketio.ASGIApp(sio, other_asgi_app=app)
+
 from fastapi import FastAPI, WebSocket
 
 app = FastAPI()
@@ -793,7 +792,7 @@ if __name__ == "__main__":
     print("📋 API Documentation: http://localhost:8000/docs")
     
     try:
-        uvicorn.run(socket_app, host="0.0.0.0", port=8000, reload=True)
+        uvicorn.run(app, host="0.0.0.0", port=8000, reload=True)
     except Exception as e:
         logger.error(f"❌ Server startup failed: {e}")
         input("Press Enter to exit...")
