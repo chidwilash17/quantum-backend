@@ -53,7 +53,7 @@ except ImportError as e:
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(_name_)
+logger = logging.getLogger(__name__)
 
 # ===== SOCKET.IO SETUP =====
 sio = socketio.AsyncServer(
@@ -772,7 +772,7 @@ async def health():
 socket_app = socketio.ASGIApp(sio, other_asgi_app=app)
 
 # ===== SERVER STARTUP =====
-if _name_ == "_main_":
+if __name__ == "__main__":
     import uvicorn
     print("🚀 Starting IBM Quantum-Enhanced QKD Simulator...")
     print("✅ Real-time transmission enabled")
