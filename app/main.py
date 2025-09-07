@@ -31,23 +31,23 @@ except ImportError as e:
     
     # Create dummy classes to prevent NameError
     class QuantumCircuit:
-        def _init_(self, *args, **kwargs): pass
+        def __init__(self, *args, **kwargs): pass
         def x(self, *args): pass
         def h(self, *args): pass
         def measure(self, *args): pass
     
     class QiskitRuntimeService:
-        def _init_(self, *args, **kwargs): pass
+        def __init__(self, *args, **kwargs): pass
         def backends(self): return []
         def least_busy(self, *args, **kwargs): return None
     
     class Session:
-        def _init_(self, *args, **kwargs): pass
-        def _enter_(self): return self
-        def _exit_(self, *args): pass
+        def __init__(self, *args, **kwargs): pass
+        def __enter__(self): return self
+        def __exit__(self, *args): pass
     
     class Sampler:
-        def _init_(self, *args, **kwargs): pass
+        def __init__(self, *args, **kwargs): pass
         def run(self, *args, **kwargs): 
             return type('MockJob', (), {'result': lambda: type('MockResult', (), {'get_counts': lambda: {'0': 512, '1': 512}})()})()
 
@@ -77,7 +77,7 @@ app.add_middleware(
 
 # ===== ENHANCED IBM QUANTUM SERVICE (UPDATED FOR QISKIT 2.0) =====
 class IBMQuantumService:
-    def _init_(self):
+    def __init__(self):
         self.service = None
         self.backend = None
         self.is_initialized = False
@@ -196,7 +196,7 @@ class IBMQuantumService:
                     logger.info(f"Selected least busy backend: {self.backend.name}")
                 else:
                     # Fallback to first available backend
-                    self.backend = backends
+                    self.backend = backends[0]
                     logger.info(f"Using fallback backend: {self.backend.name}")
                     
             except Exception as backend_error:
