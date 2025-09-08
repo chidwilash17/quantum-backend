@@ -13,6 +13,7 @@ import base64
 import hashlib
 import logging
 from typing import Dict, List, Optional, Any
+import uvicorn
 
 # Socket.IO imports
 import socketio
@@ -56,13 +57,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # ===== SOCKET.IO SETUP =====
-sio = socketio.AsyncServer(
-    async_mode='asgi',
-    app = FastAPI(),
-    cors_allowed_origins=["http://localhost:3000", "http://127.0.0.1:3000","*"],
-    logger=True,
-    engineio_logger=False
-)
+sio = socketio.AsyncServer(async_mode='asgi', cors_allowed_origins='*')
 
 # FastAPI app setup
 app = FastAPI(title="IBM Quantum-Enhanced QKD Simulator", version="7.0.0")
@@ -70,7 +65,7 @@ app = FastAPI(title="IBM Quantum-Enhanced QKD Simulator", version="7.0.0")
 # CORS middleware for HTTP endpoints
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000","*"],
+    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000", "*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -197,7 +192,7 @@ class IBMQuantumService:
                     logger.info(f"Selected least busy backend: {self.backend.name}")
                 else:
                     # Fallback to first available backend
-                    self.backend = backends
+                    self.backend = backends[0]
                     logger.info(f"Using fallback backend: {self.backend.name}")
                     
             except Exception as backend_error:
@@ -770,21 +765,10 @@ async def health():
     }
 
 # ===== MOUNT SOCKET.IO =====
+# Mount Socket.IO onto FastAPI
 socket_app = socketio.ASGIApp(sio, other_asgi_app=app)
 
-# ===== SERVER STARTUP =====
+# Then use socket_app in uvicorn.run
 if __name__ == "__main__":
-    import uvicorn
     print("🚀 Starting IBM Quantum-Enhanced QKD Simulator...")
-    print("✅ Real-time transmission enabled")
-    print("📡 WebSocket endpoint: ws://localhost:8000/socket.io/")
-    print("🔑 IAM Token exchange: POST /api/quantum/iam-token")
-    print("🌐 IBM Quantum init: POST /api/quantum/initialize")
-    print("📊 Backend status: GET /api/quantum/status")
-    print("📋 API Documentation: http://localhost:8000/docs")
-    
-    try:
-        uvicorn.run(socket_app, host="0.0.0.0", port=8000, reload=True)
-    except Exception as e:
-        logger.error(f"❌ Server startup failed: {e}")
-        input("Press Enter to exit...")
+    uvicorn.run(socket_app, host="0.0.0.0", port=8000, reload=True)
