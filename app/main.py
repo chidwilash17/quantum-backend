@@ -22,7 +22,6 @@ import socketio
 try:
     from qiskit import QuantumCircuit, transpile
     from qiskit_ibm_runtime import QiskitRuntimeService, Session, Sampler
-    # REMOVED: from qiskit_ibm_provider import IBMProvider - No longer needed in Qiskit 2.0+
     IBM_QUANTUM_AVAILABLE = True
     print("✅ IBM Quantum libraries loaded successfully")
 except ImportError as e:
@@ -765,7 +764,7 @@ async def health():
     }
 
 # ===== MOUNT SOCKET.IO =====
-# Mount Socket.IO onto FastAPI
+# Create ASGI application combining Socket.IO and FastAPI
 socket_app = socketio.ASGIApp(sio, other_asgi_app=app)
 
 # Then use socket_app in uvicorn.run
