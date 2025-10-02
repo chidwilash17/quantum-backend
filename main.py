@@ -6,7 +6,7 @@ with Integrated High-Performance Detection
 import os
 import cv2
 import numpy as np
-import face_recognition
+
 import sqlite3
 import json
 import threading
