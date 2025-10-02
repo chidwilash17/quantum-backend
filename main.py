@@ -1,5 +1,6 @@
 """
 Pilgrimage Crowd Management System - Advanced AI Detection Backend
+with Integrated High-Performance Detection
 """
 
 import os
@@ -12,6 +13,7 @@ import threading
 import time
 import random
 import requests
+import base64
 from datetime import datetime, timedelta
 from flask import Flask, request, jsonify, session
 from flask_socketio import SocketIO, emit
@@ -24,6 +26,7 @@ import sys
 from collections import defaultdict, deque
 import torch
 import torchvision
+from torchvision.models.detection import fasterrcnn_resnet50_fpn
 from PIL import Image
 import warnings
 warnings.filterwarnings('ignore')
@@ -55,9 +58,7 @@ JWT_SECRET = 'pilgrimage_jwt_secret_2024'
 JWT_ALGORITHM = 'HS256'
 
 # Global variables
-camera = None
 camera_active = False
-frame_count = 0
 
 # Database initialization
 def init_db():
@@ -160,6 +161,20 @@ def init_db():
         )
     ''')
     
+    # Emergency logs table
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS emergency_logs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            type TEXT NOT NULL,
+            user_data TEXT,
+            description TEXT,
+            location TEXT,
+            severity TEXT,
+            status TEXT DEFAULT 'active',
+            timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    ''')
+    
     # Insert default admin user
     admin_password = bcrypt.hashpw('admin123'.encode('utf-8'), bcrypt.gensalt())
     cursor.execute('''
@@ -193,41 +208,8 @@ def init_db():
 # Initialize database
 init_db()
 
-# Sample pilgrim data
-sample_pilgrims = [
-    {
-        'id': 1,
-        'name': 'Rajesh Kumar',
-        'age': 45,
-        'city': 'Mumbai',
-        'special_needs': False,
-        'preferred_language': 'Hindi',
-        'visit_count': 3
-    },
-    {
-        'id': 2,
-        'name': 'Priya Sharma',
-        'age': 32,
-        'city': 'Delhi',
-        'special_needs': False,
-        'preferred_language': 'English',
-        'visit_count': 2
-    },
-    {
-        'id': 3,
-        'name': 'Amit Patel',
-        'age': 68,
-        'city': 'Ahmedabad',
-        'special_needs': True,
-        'preferred_language': 'Gujarati',
-        'visit_count': 5
-    }
-]
-
 # Initialize data stores
-temples_data = []
 alerts_data = []
-pilgrims_data = []
 emergencies_data = []
 queue_data = defaultdict(deque)
 booking_data = []
@@ -285,130 +267,152 @@ def admin_required(f):
     
     return decorated
 
-class AdvancedAIPilgrimDetector:
-    """Advanced AI Pilgrim Detector with multiple models"""
+class IntegratedAIPilgrimDetector:
+    """Integrated AI Pilgrim Detector with enhanced multi-model detection"""
     
     def __init__(self):
-        # Detection settings
-        self.processing_width = 640
-        self.frame_skip = 3  # Process every 3rd frame for performance
-        self.detection_interval = 1.5  # Seconds between detections
+        # Detection settings optimized for smooth FPS
+        self.processing_width = 480
+        self.frame_skip = 4
+        self.detection_interval = 2.0
         
         # AI Model initialization
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         logger.info(f"Using device: {self.device}")
         
-        # Load models
+        # Load pre-trained models
         self.face_detector = self.load_face_detection_model()
+        self.person_detector = self.load_person_detection_model()
         self.yolo_model = self.load_yolo_model()
         
         # Detection thresholds
         self.face_confidence_threshold = 0.7
-        self.person_confidence_threshold = 0.5
+        self.person_confidence_threshold = 0.6
+        self.yolo_confidence_threshold = 0.5
         
-        # Tracking for smooth counts
+        # Tracking
         self.tracked_objects = []
         self.track_id = 0
         self.max_tracking_distance = 50
         self.detection_history = []
-        self.history_size = 10
+        self.history_size = 15
         
         self.cap = None
         self.is_running = False
         self.last_detection_time = 0
         self.frame_count = 0
+        self.fps = 0
+        self.last_fps_time = time.time()
+        self.frames_processed = 0
         
-        # Performance optimization
-        self.last_frame = None
-        self.last_detections = []
+        # Performance monitoring
+        self.performance_stats = {
+            'fps': 0,
+            'detection_time': 0,
+            'faces_detected': 0,
+            'persons_detected': 0,
+            'total_detections': 0
+        }
 
     def load_face_detection_model(self):
-        """Load face detection model"""
+        """Load MTCNN or RetinaFace for face detection"""
         try:
-            # Use OpenCV's DNN face detector (lightweight and accurate)
-            model_file = "opencv_face_detector_uint8.pb"
-            config_file = "opencv_face_detector.pbtxt"
-            
-            # Download model if not exists
-            if not os.path.exists(model_file):
-                logger.info("Downloading face detection model...")
-                # Use built-in Haar cascade as fallback
-                return cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_frontalface_default.xml')
-            
-            net = cv2.dnn.readNetFromTensorflow(model_file, config_file)
-            logger.info("✅ DNN Face detector loaded")
-            return net
+            # Try to load RetinaFace (more accurate)
+            from retinaface import RetinaFace
+            logger.info("✅ RetinaFace model loaded")
+            return 'retinaface'
+        except:
+            try:
+                from facenet_pytorch import MTCNN
+                mtcnn = MTCNN(keep_all=True, device=self.device, min_face_size=20)
+                logger.info("✅ MTCNN model loaded")
+                return mtcnn
+            except:
+                # Fallback to OpenCV DNN face detector
+                model_file = "res10_300x300_ssd_iter_140000_fp16.caffemodel"
+                config_file = "deploy.prototxt"
+                try:
+                    net = cv2.dnn.readNetFromCaffe(config_file, model_file)
+                    logger.info("✅ OpenCV DNN Face detector loaded")
+                    return net
+                except:
+                    logger.warning("❌ Could not load advanced face detector, using Haar cascades")
+                    return cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_frontalface_default.xml')
+
+    def load_person_detection_model(self):
+        """Load Faster R-CNN or YOLO for person detection"""
+        try:
+            # Load Faster R-CNN pre-trained on COCO
+            model = fasterrcnn_resnet50_fpn(pretrained=True)
+            model.eval().to(self.device)
+            logger.info("✅ Faster R-CNN model loaded")
+            return model
         except Exception as e:
-            logger.warning(f"DNN face detector failed: {e}")
-            # Fallback to Haar cascade
-            return cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_frontalface_default.xml')
+            logger.warning(f"Faster R-CNN loading failed: {e}")
+            return None
 
     def load_yolo_model(self):
         """Load YOLOv5 for person detection"""
         try:
-            # Try to import ultralytics YOLO
-            from ultralytics import YOLO
-            model = YOLO('yolov8n.pt')  # Nano version for speed
-            logger.info("✅ YOLOv8 model loaded")
+            # Load YOLOv5 (much faster and accurate)
+            model = torch.hub.load('ultralytics/yolov5', 'yolov5s', pretrained=True)
+            model.conf = self.yolo_confidence_threshold  # Confidence threshold
+            model.classes = [0]  # Only detect persons (class 0 in COCO)
+            logger.info("✅ YOLOv5 model loaded")
             return model
         except Exception as e:
-            logger.warning(f"YOLOv8 loading failed: {e}")
-            try:
-                # Fallback to OpenCV DNN with YOLO
-                weights = "yolov3-tiny.weights"
-                config = "yolov3-tiny.cfg"
-                
-                if os.path.exists(weights) and os.path.exists(config):
-                    net = cv2.dnn.readNetFromDarknet(config, weights)
-                    net.setPreferableBackend(cv2.dnn.DNN_BACKEND_OPENCV)
-                    net.setPreferableTarget(cv2.dnn.DNN_TARGET_CPU)
-                    logger.info("✅ YOLOv3-tiny model loaded")
-                    return net
-                else:
-                    logger.warning("YOLO weights not found, using Haar cascade for person detection")
-                    return None
-            except Exception as e2:
-                logger.warning(f"YOLO fallback failed: {e2}")
-                return None
+            logger.warning(f"YOLOv5 loading failed: {e}")
+            return None
 
-    def initialize_camera(self):
-        """Initialize laptop camera with optimal settings"""
+    def initialize_camera_optimized(self):
+        """Initialize camera with optimal settings"""
         try:
-            self.cap = cv2.VideoCapture(0)  # Laptop camera
-            
-            if self.cap.isOpened():
-                # Set optimal camera settings
-                self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
-                self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
-                self.cap.set(cv2.CAP_PROP_FPS, 20)
-                self.cap.set(cv2.CAP_PROP_AUTOFOCUS, 1)
-                self.cap.set(cv2.CAP_PROP_AUTO_EXPOSURE, 1)
+            # Try multiple camera sources
+            camera_sources = [
                 
-                # Test camera
-                ret, test_frame = self.cap.read()
-                if ret:
-                    logger.info(f"✅ Laptop camera connected - {test_frame.shape[1]}x{test_frame.shape[0]}")
-                    return True
-                else:
-                    logger.error("❌ Camera test frame failed")
-                    return False
+                "http://192.0.0.4:8080/video",
+                "http://192.168.1.100:8080/video"  # Add more if needed
+            ]
+            
+            for source in camera_sources:
+                logger.info(f"🔍 Trying camera source: {source}")
+                self.cap = cv2.VideoCapture(source)
+                
+                if self.cap.isOpened():
+                    self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
+                    self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 360)
+                    self.cap.set(cv2.CAP_PROP_FPS, 20)
+                    self.cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+                    
+                    # Test camera with timeout
+                    test_start = time.time()
+                    while time.time() - test_start < 5:
+                        ret, test_frame = self.cap.read()
+                        if ret and test_frame is not None:
+                            logger.info(f"✅ Camera connected at source {source}")
+                            return True
+                        time.sleep(0.1)
+                    
+                    self.cap.release()
+            
+            logger.error("❌ No working camera source available")
             return False
             
         except Exception as e:
             logger.error(f"Camera init error: {e}")
             return False
 
-    def detect_faces(self, frame):
-        """Detect faces using the available model"""
-        faces = []
+    def detect_faces_dnn(self, frame):
+        """High-accuracy face detection using DNN"""
         try:
             if isinstance(self.face_detector, cv2.dnn_Net):
-                # DNN face detection
+                # OpenCV DNN face detection
                 h, w = frame.shape[:2]
-                blob = cv2.dnn.blobFromImage(frame, 1.0, (300, 300), [104, 117, 123])
+                blob = cv2.dnn.blobFromImage(frame, 1.0, (300, 300), [104, 117, 123], False, False)
                 self.face_detector.setInput(blob)
                 detections = self.face_detector.forward()
                 
+                faces = []
                 for i in range(detections.shape[2]):
                     confidence = detections[0, 0, i, 2]
                     if confidence > self.face_confidence_threshold:
@@ -416,96 +420,113 @@ class AdvancedAIPilgrimDetector:
                         y1 = int(detections[0, 0, i, 4] * h)
                         x2 = int(detections[0, 0, i, 5] * w)
                         y2 = int(detections[0, 0, i, 6] * h)
-                        faces.append((x1, y1, x2-x1, y2-y1))
+                        
+                        if x2 > x1 and y2 > y1:  # Valid bounding box
+                            faces.append((x1, y1, x2-x1, y2-y1))
+                
+                logger.debug(f"DNN detected {len(faces)} faces")
+                return faces
             else:
-                # Haar cascade face detection
-                gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-                faces = self.face_detector.detectMultiScale(
-                    gray, 
-                    scaleFactor=1.1, 
-                    minNeighbors=5, 
-                    minSize=(30, 30)
-                )
+                return []
         except Exception as e:
-            logger.error(f"Face detection error: {e}")
-        
-        return faces
+            logger.error(f"DNN face detection error: {e}")
+            return []
+
+    def detect_faces_mtcnn(self, frame):
+        """Face detection using MTCNN"""
+        try:
+            if hasattr(self.face_detector, 'detect'):
+                # Convert BGR to RGB
+                rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                pil_image = Image.fromarray(rgb_frame)
+                
+                # Detect faces
+                boxes, probs = self.face_detector.detect(pil_image)
+                
+                faces = []
+                if boxes is not None:
+                    for i, box in enumerate(boxes):
+                        if probs[i] > self.face_confidence_threshold:
+                            x1, y1, x2, y2 = box.astype(int)
+                            faces.append((x1, y1, x2-x1, y2-y1))
+                
+                logger.debug(f"MTCNN detected {len(faces)} faces")
+                return faces
+            else:
+                return []
+        except Exception as e:
+            logger.error(f"MTCNN detection error: {e}")
+            return []
 
     def detect_persons_yolo(self, frame):
-        """Detect persons using YOLO"""
-        persons = []
+        """Person detection using YOLOv5"""
         try:
-            if hasattr(self.yolo_model, 'predict'):
-                # Ultralytics YOLOv8
-                results = self.yolo_model(frame, verbose=False)
-                for result in results:
-                    boxes = result.boxes
-                    if boxes is not None:
-                        for box in boxes:
-                            if box.cls == 0 and box.conf > self.person_confidence_threshold:  # Person class
-                                x1, y1, x2, y2 = map(int, box.xyxy[0])
-                                persons.append((x1, y1, x2-x1, y2-y1))
-            elif isinstance(self.yolo_model, cv2.dnn_Net):
-                # OpenCV DNN YOLO
-                h, w = frame.shape[:2]
-                blob = cv2.dnn.blobFromImage(frame, 1/255.0, (416, 416), swapRB=True, crop=False)
-                self.yolo_model.setInput(blob)
-                outputs = self.yolo_model.forward()
+            if self.yolo_model is not None:
+                # YOLOv5 detection
+                results = self.yolo_model(frame)
+                detections = results.pandas().xyxy[0]
                 
-                for output in outputs:
-                    for detection in output:
-                        scores = detection[5:]
-                        class_id = np.argmax(scores)
-                        confidence = scores[class_id]
-                        
-                        if class_id == 0 and confidence > self.person_confidence_threshold:  # Person class
-                            center_x = int(detection[0] * w)
-                            center_y = int(detection[1] * h)
-                            width = int(detection[2] * w)
-                            height = int(detection[3] * h)
-                            
-                            x1 = int(center_x - width/2)
-                            y1 = int(center_y - height/2)
-                            persons.append((x1, y1, width, height))
+                persons = []
+                for _, detection in detections.iterrows():
+                    if detection['confidence'] > self.yolo_confidence_threshold and detection['class'] == 0:
+                        x1, y1, x2, y2 = int(detection['xmin']), int(detection['ymin']), \
+                                        int(detection['xmax']), int(detection['ymax'])
+                        persons.append((x1, y1, x2-x1, y2-y1))
+                
+                logger.debug(f"YOLO detected {len(persons)} persons")
+                return persons
+            return []
         except Exception as e:
             logger.error(f"YOLO detection error: {e}")
-        
-        return persons
+            return []
 
-    def detect_persons_haar(self, frame):
-        """Fallback person detection using Haar cascade"""
-        persons = []
+    def detect_persons_faster_rcnn(self, frame):
+        """Person detection using Faster R-CNN"""
         try:
-            # Load person cascade if available
-            cascade_path = cv2.data.haarcascades + 'haarcascade_fullbody.xml'
-            if os.path.exists(cascade_path):
-                person_cascade = cv2.CascadeClassifier(cascade_path)
-                gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-                bodies = person_cascade.detectMultiScale(gray, 1.1, 3)
-                persons = list(bodies)
+            if self.person_detector is not None:
+                # Convert frame to tensor
+                image_tensor = torchvision.transforms.functional.to_tensor(frame).to(self.device)
+                
+                with torch.no_grad():
+                    predictions = self.person_detector([image_tensor])
+                
+                persons = []
+                boxes = predictions[0]['boxes'].cpu().numpy()
+                labels = predictions[0]['labels'].cpu().numpy()
+                scores = predictions[0]['scores'].cpu().numpy()
+                
+                for i, (box, label, score) in enumerate(zip(boxes, labels, scores)):
+                    if label == 1 and score > self.person_confidence_threshold:  # Person class
+                        x1, y1, x2, y2 = box.astype(int)
+                        persons.append((x1, y1, x2-x1, y2-y1))
+                
+                logger.debug(f"Faster R-CNN detected {len(persons)} persons")
+                return persons
+            return []
         except Exception as e:
-            logger.warning(f"Haar person detection failed: {e}")
-        
-        return persons
+            logger.error(f"Faster R-CNN detection error: {e}")
+            return []
 
     def advanced_ai_detection(self, frame):
         """Main AI detection function combining multiple models"""
+        start_time = time.time()
+        
         try:
             all_detections = []
             
-            # 1. YOLO Person Detection (Primary)
+            # 1. YOLOv5 Person Detection (Primary - fastest and most accurate)
             yolo_detections = self.detect_persons_yolo(frame)
             all_detections.extend([{'bbox': bbox, 'type': 'person', 'model': 'yolo'} for bbox in yolo_detections])
             
             # 2. Face Detection (Secondary - for close-range verification)
-            if len(yolo_detections) < 10:  # Performance optimization
-                face_detections = self.detect_faces(frame)
-                all_detections.extend([{'bbox': bbox, 'type': 'face', 'model': 'face'} for bbox in face_detections])
+            if len(yolo_detections) < 5:  # Only run if few persons detected (performance optimization)
+                face_detections = self.detect_faces_dnn(frame)
+                all_detections.extend([{'bbox': bbox, 'type': 'face', 'model': 'dnn'} for bbox in face_detections])
             
-            # 3. Haar Cascade Fallback
-            if not all_detections:
-                haar_detections = self.detect_persons_haar(frame)
-                all_detections.extend([{'bbox': bbox, 'type': 'person', 'model': 'haar'} for bbox in haar_detections])
+            # 3. Faster R-CNN (Fallback - most accurate but slower)
+            if not all_detections:  # Only run if other methods fail
+                frcnn_detections = self.detect_persons_faster_rcnn(frame)
+                all_detections.extend([{'bbox': bbox, 'type': 'person', 'model': 'frcnn'} for bbox in frcnn_detections])
             
             # Apply non-maximum suppression
             filtered_detections = self.non_max_suppression(all_detections)
@@ -516,7 +537,7 @@ class AdvancedAIPilgrimDetector:
                 bbox = detection['bbox']
                 x, y, w, h = bbox
                 
-                # Calculate confidence based on detection type
+                # Calculate confidence based on detection type and size
                 if detection['type'] == 'face':
                     confidence = 0.9  # Faces are highly reliable
                     detection_type = "Face"
@@ -526,24 +547,51 @@ class AdvancedAIPilgrimDetector:
                     size_ratio = (w * h) / (frame.shape[0] * frame.shape[1])
                     
                     if 1.5 < aspect_ratio < 3.5 and size_ratio > 0.001:
-                        confidence = 0.8
+                        confidence = 0.85
                     else:
-                        confidence = 0.6
+                        confidence = 0.7
                     detection_type = "Person"
+                
+                # Estimate distance
+                box_area = w * h
+                frame_area = frame.shape[0] * frame.shape[1]
+                
+                if box_area > frame_area * 0.05:
+                    distance = "Very Close"
+                elif box_area > frame_area * 0.01:
+                    distance = "Close"
+                elif box_area > frame_area * 0.002:
+                    distance = "Medium"
+                else:
+                    distance = "Far"
                 
                 final_detections.append({
                     'bbox': bbox,
                     'confidence': confidence,
+                    'distance': distance,
                     'type': detection_type,
                     'model': detection['model']
                 })
             
-            # Update tracking for smooth counts
+            # Update tracking
             self.update_tracking(final_detections)
             
-            # Get smoothed count
+            # Smooth count
             people_count = self.smooth_detection_count(len(final_detections))
             
+            # Update performance stats
+            detection_time = time.time() - start_time
+            face_count = len([d for d in final_detections if d['type'] == 'Face'])
+            person_count = len([d for d in final_detections if d['type'] == 'Person'])
+            
+            self.performance_stats.update({
+                'detection_time': detection_time,
+                'faces_detected': face_count,
+                'persons_detected': person_count,
+                'total_detections': len(final_detections)
+            })
+            
+            logger.debug(f"Integrated AI Detection: {len(final_detections)} objects in {detection_time:.3f}s")
             return people_count, final_detections
             
         except Exception as e:
@@ -556,15 +604,15 @@ class AdvancedAIPilgrimDetector:
             return []
         
         boxes = np.array([det['bbox'] for det in detections])
+        scores = np.array([0.9 if det['type'] == 'face' else 0.8 for det in detections])
         
-        # Convert to x1, y1, x2, y2
         x1 = boxes[:, 0]
         y1 = boxes[:, 1]
         x2 = boxes[:, 0] + boxes[:, 2]
         y2 = boxes[:, 1] + boxes[:, 3]
         
         area = (x2 - x1 + 1) * (y2 - y1 + 1)
-        idxs = np.argsort(y2)  # Sort by bottom y coordinate
+        idxs = np.argsort(scores)
         
         pick = []
         while len(idxs) > 0:
@@ -583,22 +631,20 @@ class AdvancedAIPilgrimDetector:
             overlap = (w * h) / area[idxs[:last]]
             idxs = np.delete(idxs, np.concatenate(([last], np.where(overlap > overlap_thresh)[0])))
         
+        logger.debug(f"NMS reduced {len(detections)} detections to {len(pick)}")
         return [detections[i] for i in pick]
 
     def update_tracking(self, detections):
         """Object tracking for consistent counts"""
         current_time = time.time()
         
-        # Remove old tracks (older than 3 seconds)
         self.tracked_objects = [obj for obj in self.tracked_objects 
                                if current_time - obj['last_seen'] < 3.0]
         
-        # Update existing tracks or create new ones
         for detection in detections:
             bbox = detection['bbox']
             center = (bbox[0] + bbox[2]//2, bbox[1] + bbox[3]//2)
             
-            # Find closest existing track
             min_distance = float('inf')
             best_track = None
             
@@ -612,12 +658,10 @@ class AdvancedAIPilgrimDetector:
                     best_track = track
             
             if best_track:
-                # Update existing track
                 best_track['center'] = center
                 best_track['last_seen'] = current_time
                 best_track['bbox'] = bbox
             else:
-                # Create new track
                 self.tracked_objects.append({
                     'id': self.track_id,
                     'center': center,
@@ -633,82 +677,107 @@ class AdvancedAIPilgrimDetector:
         if len(self.detection_history) > self.history_size:
             self.detection_history.pop(0)
         
-        # Use weighted average with more weight to recent detections
-        if len(self.detection_history) > 0:
-            weights = np.linspace(0.5, 1.5, len(self.detection_history))
-            weighted_avg = np.average(self.detection_history, weights=weights)
-            return int(round(weighted_avg))
+        weights = np.linspace(0.5, 1.5, len(self.detection_history))
+        weighted_avg = np.average(self.detection_history, weights=weights)
         
-        return current_count
+        return int(round(weighted_avg))
 
-    def draw_detection_overlay(self, frame, detections):
-        """Draw detection overlay on frame"""
+    def calculate_fps(self):
+        """Calculate current FPS"""
+        self.frames_processed += 1
+        current_time = time.time()
+        time_diff = current_time - self.last_fps_time
+        
+        if time_diff >= 1.0:
+            self.fps = self.frames_processed / time_diff
+            self.frames_processed = 0
+            self.last_fps_time = current_time
+            self.performance_stats['fps'] = self.fps
+
+    def draw_enhanced_visualizations(self, frame, detections):
+        """Draw enhanced AI detection visualizations"""
         try:
             overlay = frame.copy()
             
             for detection in detections:
                 x, y, w, h = detection['bbox']
                 confidence = detection['confidence']
+                distance = detection['distance']
                 det_type = detection['type']
+                model = detection['model']
                 
-                # Color coding
                 if det_type == "Face":
                     color = (0, 255, 0)  # Green for faces
-                    label = f"Face ({confidence*100:.0f}%)"
                 else:
-                    color = (0, 255, 255)  # Yellow for persons
-                    label = f"Person ({confidence*100:.0f}%)"
+                    if distance == "Very Close":
+                        color = (0, 255, 255)  # Yellow
+                    elif distance == "Close":
+                        color = (0, 165, 255)  # Orange
+                    elif distance == "Medium":
+                        color = (0, 100, 255)  # Light red
+                    else:
+                        color = (0, 0, 255)  # Red
                 
                 # Draw bounding box
                 cv2.rectangle(overlay, (x, y), (x + w, y + h), color, 2)
                 
-                # Draw label
-                cv2.rectangle(overlay, (x, y-25), (x + 150, y), color, -1)
-                cv2.putText(overlay, label, (x, y-5), 
-                           cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
+                # Draw info text
+                info_text = f"{det_type} {distance} ({confidence*100:.0f}%)"
+                cv2.putText(overlay, info_text, (x, y-10), 
+                           cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 1)
+                cv2.putText(overlay, f"Model: {model}", (x, y+h+20), 
+                           cv2.FONT_HERSHEY_SIMPLEX, 0.4, color, 1)
             
-            # Add statistics overlay
-            stats_text = f"AI Detection: {len(detections)} | Tracked: {len(self.tracked_objects)}"
+            # Enhanced statistics overlay
+            face_count = len([d for d in detections if d['type'] == 'Face'])
+            person_count = len([d for d in detections if d['type'] == 'Person'])
+            
+            stats_text = f"FPS: {self.fps:.1f} | Faces: {face_count} | Persons: {person_count} | Tracked: {len(self.tracked_objects)}"
             cv2.putText(overlay, stats_text, (10, 30), 
-                       cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
+                       cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
+            
+            detection_time_text = f"Detection: {self.performance_stats['detection_time']*1000:.1f}ms"
+            cv2.putText(overlay, detection_time_text, (10, 55), 
+                       cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
+            
+            cv2.putText(overlay, "INTEGRATED AI DETECTION - Press 'q' to quit", (10, 80), 
+                       cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
             
             timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             cv2.putText(overlay, timestamp, (10, overlay.shape[0] - 10), 
                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
             
-            cv2.putText(overlay, "Press 'q' to quit", (10, 60), 
-                       cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
-            
             return overlay
             
         except Exception as e:
-            logger.error(f"Overlay drawing error: {e}")
+            logger.error(f"Visualization error: {e}")
             return frame
 
-    def run_ai_detection(self):
-        """Main AI detection loop optimized for performance"""
-        if not self.initialize_camera():
+    def run_integrated_detection(self):
+        """Main integrated detection loop"""
+        if not self.initialize_camera_optimized():
             logger.error("❌ Failed to initialize camera")
             return
         
         self.is_running = True
-        logger.info("🚀 Starting Advanced AI Pilgrim Detection")
-        logger.info("⚡ Models: YOLO + Face Detection + Tracking")
+        logger.info("🚀 Starting Integrated AI Pilgrim Detection")
+        logger.info("⚡ Models: YOLOv5 + DNN Faces + Faster R-CNN + Tracking")
         
         try:
             while self.is_running:
                 ret, frame = self.cap.read()
                 if not ret:
-                    logger.warning("⚠️ Failed to read frame")
-                    time.sleep(0.01)
+                    logger.warning("⚠️ Failed to read frame - retrying...")
+                    time.sleep(0.1)
                     continue
                 
                 self.frame_count += 1
+                self.calculate_fps()
                 
-                # Skip frames for performance (process every 3rd frame)
+                # Skip frames for performance
                 if self.frame_count % self.frame_skip != 0:
-                    # Show frame without processing
-                    cv2.imshow('AI Pilgrim Detection', frame)
+                    display_frame = self.draw_enhanced_visualizations(frame, [])
+                    cv2.imshow('Integrated AI Pilgrim Detection', display_frame)
                     if cv2.waitKey(1) & 0xFF == ord('q'):
                         break
                     continue
@@ -716,26 +785,40 @@ class AdvancedAIPilgrimDetector:
                 # Throttle detection frequency
                 current_time = time.time()
                 if current_time - self.last_detection_time < self.detection_interval:
-                    cv2.imshow('AI Pilgrim Detection', frame)
+                    display_frame = self.draw_enhanced_visualizations(frame, [])
+                    cv2.imshow('Integrated AI Pilgrim Detection', display_frame)
                     if cv2.waitKey(1) & 0xFF == ord('q'):
                         break
                     continue
                 
                 self.last_detection_time = current_time
                 
-                # Perform AI detection
+                # Perform integrated AI detection
                 people_count, detections = self.advanced_ai_detection(frame)
                 
-                # Send data to frontend via SocketIO
+                # Send data to frontend
                 self.send_detection_data(people_count, detections)
                 
-                # Draw visualizations
-                overlay_frame = self.draw_detection_overlay(frame, detections)
+                # Draw enhanced visualizations
+                overlay_frame = self.draw_enhanced_visualizations(frame, detections)
+                
+                # Stream to frontend with quality adjustment
+                encode_quality = 60 if self.fps < 15 else 40
+                _, buffer = cv2.imencode('.jpg', overlay_frame, [cv2.IMWRITE_JPEG_QUALITY, encode_quality])
+                jpg_as_text = base64.b64encode(buffer).decode('utf-8')
+                
+                socketio.emit('live_frame', {
+                    'image': jpg_as_text,
+                    'timestamp': datetime.now().isoformat(),
+                    'detections': len(detections),
+                    'faces_detected': self.performance_stats['faces_detected'],
+                    'persons_detected': self.performance_stats['persons_detected'],
+                    'fps': self.fps
+                })
                 
                 # Display frame
-                cv2.imshow('AI Pilgrim Detection', overlay_frame)
+                cv2.imshow('Integrated AI Pilgrim Detection', overlay_frame)
                 
-                # Check for quit command
                 if cv2.waitKey(1) & 0xFF == ord('q'):
                     break
                 
@@ -749,12 +832,14 @@ class AdvancedAIPilgrimDetector:
     def send_detection_data(self, people_count, detections):
         """Send detection data to frontend"""
         try:
+            face_count = self.performance_stats['faces_detected']
+            person_count = self.performance_stats['persons_detected']
             avg_confidence = np.mean([d['confidence'] for d in detections]) if detections else 0.5
             
             # Update recognition stats
             global recognition_stats
             recognition_stats.update({
-                'faces_detected': len([d for d in detections if d['type'] == 'Face']),
+                'faces_detected': face_count,
                 'current_pilgrims': people_count,
                 'unknown_visitors': 0,  # AI detection doesn't distinguish known/unknown
                 'recognition_confidence': float(avg_confidence),
@@ -767,7 +852,7 @@ class AdvancedAIPilgrimDetector:
             # Update temple data
             self.update_temple_data(people_count, avg_confidence)
             
-            logger.info(f"🤖 AI DETECTION: {people_count} pilgrims (Confidence: {avg_confidence:.2f})")
+            logger.info(f"🤖 INTEGRATED AI DETECTION: {face_count} faces, {person_count} persons, Total: {people_count}, FPS: {self.fps:.1f}")
             
         except Exception as e:
             logger.error(f"❌ Error sending detection data: {e}")
@@ -891,7 +976,7 @@ class AdvancedAIPilgrimDetector:
         logger.info("🛑 AI detection system shut down")
 
 # Initialize AI detector
-ai_detector = AdvancedAIPilgrimDetector()
+ai_detector = IntegratedAIPilgrimDetector()
 
 # Initialize managers
 class QueueManager:
@@ -971,8 +1056,6 @@ class CrowdPredictor:
         if len(crowds) < 2:
             return {'prediction': 'Stable', 'confidence': 0.5}
         
-        # Continuing from the previous code...
-
         current_crowd = crowds[-1]
         avg_crowd = np.mean(crowds)
         
@@ -1011,7 +1094,7 @@ def camera_processing_thread():
     global camera_active
     
     logger.info("🚀 Starting AI-powered camera processing")
-    ai_detector.run_ai_detection()
+    ai_detector.run_integrated_detection()
 
 # Authentication endpoints
 @app.route('/api/login', methods=['POST'])
@@ -1560,6 +1643,233 @@ def not_found(error):
 @app.errorhandler(500)
 def internal_error(error):
     return jsonify({'error': 'Internal server error'}), 500
+# Enhanced backend with location and emergency features
+import phonenumbers
+from twilio.rest import Client
+import smtplib
+
+
+class EmergencyService:
+    """Advanced emergency service handler"""
+    
+    def __init__(self):
+        self.emergency_contacts = {
+            'police': '+91100',
+            'ambulance': '+91108',
+            'fire': '+91101',
+            'women_helpline': '+91109'
+        }
+        
+    def handle_police_emergency(self, user_data, issue_description, location):
+        """Handle police emergency with automated reporting"""
+        emergency_data = {
+            'type': 'police',
+            'user': user_data,
+            'description': issue_description,
+            'location': location,
+            'timestamp': datetime.now().isoformat(),
+            'priority': 'high' if 'violence' in issue_description.lower() else 'medium'
+        }
+        
+        # Log emergency
+        self.log_emergency(emergency_data)
+        
+        # Send SMS alert to admin
+        self.send_emergency_sms(emergency_data)
+        
+        # Prepare callback data
+        return {
+            'success': True,
+            'emergency_id': emergency_data['timestamp'],
+            'message': 'Police emergency registered. Help is on the way!',
+            'contact_number': self.emergency_contacts['police']
+        }
+    
+    def handle_medical_emergency(self, user_data, symptoms, severity, location):
+        """Handle medical emergencies with triage system"""
+        medical_data = {
+            'type': 'medical',
+            'user': user_data,
+            'symptoms': symptoms,
+            'severity': severity,
+            'location': location,
+            'timestamp': datetime.now().isoformat(),
+            'triage_level': self.calculate_triage_level(severity, symptoms)
+        }
+        
+        # Log medical emergency
+        self.log_emergency(medical_data)
+        
+        # Determine appropriate response
+        contact_number = self.emergency_contacts['ambulance']
+        if severity.lower() in ['critical', 'high']:
+            # Immediate ambulance dispatch
+            self.dispatch_ambulance(medical_data)
+        
+        return {
+            'success': True,
+            'emergency_id': medical_data['timestamp'],
+            'message': f'Medical assistance alerted. {severity.upper()} case.',
+            'contact_number': contact_number,
+            'advice': self.generate_medical_advice(symptoms)
+        }
+    
+    def calculate_triage_level(self, severity, symptoms):
+        """Calculate medical triage level"""
+        critical_keywords = ['heart', 'stroke', 'unconscious', 'bleeding', 'breathing']
+        if severity.lower() == 'critical' or any(keyword in symptoms.lower() for keyword in critical_keywords):
+            return 'immediate'
+        elif severity.lower() == 'high':
+            return 'urgent'
+        else:
+            return 'standard'
+    
+    def dispatch_ambulance(self, medical_data):
+        """Simulate ambulance dispatch"""
+        # In real implementation, integrate with ambulance services
+        logger.info(f"🚑 AMBULANCE DISPATCH: {medical_data}")
+        
+    def send_emergency_sms(self, emergency_data):
+        """Send SMS alert (would require Twilio integration)"""
+        try:
+            # Example with Twilio (commented for simulation)
+            # client = Client(twilio_account_sid, twilio_auth_token)
+            # message = client.messages.create(
+            #     body=f"EMERGENCY: {emergency_data['type']} at {emergency_data['location']}",
+            #     from_=twilio_number,
+            #     to=admin_number
+            # )
+            logger.info(f"📱 Emergency SMS simulated: {emergency_data}")
+        except Exception as e:
+            logger.error(f"SMS sending failed: {e}")
+    
+    def log_emergency(self, emergency_data):
+        """Log emergency to database"""
+        conn = sqlite3.connect('pilgrimage.db')
+        cursor = conn.cursor()
+        
+        cursor.execute('''
+            INSERT INTO emergency_logs 
+            (type, user_data, description, location, severity, status, timestamp)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+        ''', (
+            emergency_data['type'],
+            json.dumps(emergency_data.get('user', {})),
+            emergency_data.get('description', '') or emergency_data.get('symptoms', ''),
+            emergency_data.get('location', ''),
+            emergency_data.get('severity', 'medium'),
+            'active',
+            emergency_data['timestamp']
+        ))
+        
+        conn.commit()
+        conn.close()
+
+# Enhanced temples with real coordinates (Delhi area examples)
+enhanced_temples = [
+    {
+        'id': 1,
+        'name': 'Akshardham Temple',
+        'capacity': 200,
+        'current_crowd': 45,
+        'wait_time': 15,
+        'status': 'open',
+        'opening_time': '06:00',
+        'closing_time': '21:00',
+        'location': {
+            'latitude': 28.6129,
+            'longitude': 77.2779,
+            'address': 'Akshardham Temple, Delhi',
+            'google_maps_url': 'https://maps.google.com/?q=28.6129,77.2779'
+        },
+        'contact': '+911123456789',
+        'facilities': ['wheelchair', 'medical', 'food']
+    },
+    {
+        'id': 2,
+        'name': 'Lotus Temple',
+        'capacity': 150,
+        'current_crowd': 78,
+        'wait_time': 25,
+        'status': 'open',
+        'opening_time': '07:00',
+        'closing_time': '20:00',
+        'location': {
+            'latitude': 28.5535,
+            'longitude': 77.2588,
+            'address': 'Lotus Temple, Delhi',
+            'google_maps_url': 'https://maps.google.com/?q=28.5535,77.2588'
+        },
+        'contact': '+911123456790',
+        'facilities': ['wheelchair', 'parking', 'meditation']
+    },
+    {
+        'id': 3,
+        'name': 'ISKCON Temple',
+        'capacity': 100,
+        'current_crowd': 32,
+        'wait_time': 8,
+        'status': 'open',
+        'opening_time': '08:00',
+        'closing_time': '19:00',
+        'location': {
+            'latitude': 28.6328,
+            'longitude': 77.2197,
+            'address': 'ISKCON Temple, Delhi',
+            'google_maps_url': 'https://maps.google.com/?q=28.6328,77.2197'
+        },
+        'contact': '+911123456791',
+        'facilities': ['food', 'accommodation', 'library']
+    }
+]
+
+# New API endpoints
+@app.route('/api/temples/<int:temple_id>/navigate', methods=['GET'])
+@token_required
+def get_temple_navigation(current_user, temple_id):
+    """Get temple navigation details"""
+    temple = next((t for t in enhanced_temples if t['id'] == temple_id), None)
+    
+    if not temple:
+        return jsonify({'error': 'Temple not found'}), 404
+    
+    return jsonify({
+        'temple_name': temple['name'],
+        'navigation': temple['location'],
+        'contact': temple['contact'],
+        'current_status': temple['status']
+    })
+
+@app.route('/api/emergency/police', methods=['POST'])
+@token_required
+def report_police_emergency(current_user):
+    """Report police emergency"""
+    data = request.get_json()
+    
+    emergency_service = EmergencyService()
+    result = emergency_service.handle_police_emergency(
+        user_data={'username': current_user},
+        issue_description=data.get('description', ''),
+        location=data.get('location', 'Unknown')
+    )
+    
+    return jsonify(result)
+
+@app.route('/api/emergency/medical', methods=['POST'])
+@token_required
+def report_medical_emergency(current_user):
+    """Report medical emergency"""
+    data = request.get_json()
+    
+    emergency_service = EmergencyService()
+    result = emergency_service.handle_medical_emergency(
+        user_data={'username': current_user},
+        symptoms=data.get('symptoms', ''),
+        severity=data.get('severity', 'medium'),
+        location=data.get('location', 'Unknown')
+    )
+    
+    return jsonify(result)
 
 if __name__ == '__main__':
     logger.info("🎯 Starting Advanced Pilgrimage AI Management System...")
